@@ -49,7 +49,7 @@ class BluetoothHidController(private val context: Context) {
             "NovaPad Gamepad",
             "NovaPad Virtual HID Controller",
             "NovaPad",
-            BluetoothHidDeviceAppSdpSettings.SUBCLASS1_COMBO,
+            0x02.toByte(), // HID Gamepad subclass
             REPORT_DESCRIPTOR
         )
         val qos = BluetoothHidDeviceAppQosSettings(
