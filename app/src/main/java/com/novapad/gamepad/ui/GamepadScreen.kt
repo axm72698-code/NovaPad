@@ -7,6 +7,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,14 +17,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.novapad.gamepad.BluetoothHidController
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 private fun triggerVibration(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -54,7 +60,7 @@ fun GamepadScreen(
             )
             .padding(16.dp)
     ) {
-        // Status Bar (Top)
+        // نوار وضعیت بالا
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -78,7 +84,7 @@ fun GamepadScreen(
             )
         }
 
-        // Left Joystick Area
+        // جوی‌استیک چپ
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -95,14 +101,14 @@ fun GamepadScreen(
             )
         }
 
-        // Right Action Buttons Area (X, Y, A, B)
+        // دکمه‌های سمت راست (Y, X, B, A)
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .padding(end = 24.dp)
                 .size(190.dp)
         ) {
-            // Y Button (Top)
+            // Y Button (بالا - زرد)
             ActionButton(
                 text = "Y",
                 color = Color(0xFFF1E05A),
@@ -114,7 +120,7 @@ fun GamepadScreen(
                 onRelease = { controller.sendReport(0, 0, 0) }
             )
 
-            // X Button (Left)
+            // X Button (چپ - آبی)
             ActionButton(
                 text = "X",
                 color = Color(0xFF58A6FF),
@@ -126,7 +132,7 @@ fun GamepadScreen(
                 onRelease = { controller.sendReport(0, 0, 0) }
             )
 
-            // B Button (Right)
+            // B Button (راست - قرمز)
             ActionButton(
                 text = "B",
                 color = Color(0xFFF85149),
@@ -138,7 +144,7 @@ fun GamepadScreen(
                 onRelease = { controller.sendReport(0, 0, 0) }
             )
 
-            // A Button (Bottom)
+            // A Button (پایین - سبز)
             ActionButton(
                 text = "A",
                 color = Color(0xFF3FB950),
@@ -150,6 +156,64 @@ fun GamepadScreen(
                 onRelease = { controller.sendReport(0, 0, 0) }
             )
         }
+    }
+}
+
+@Composable
+fun VirtualJoystick(
+    modifier: Modifier = Modifier,
+    onMove: (Float, Float) -> Unit
+) {
+    var thumbOffset by remember { mutableStateOf(Offset.Zero) }
+    val maxRadius = 140f
+
+    Box(
+        modifier = modifier
+            .size(150.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF161B22))
+            .border(2.dp, Color(0xFF30363D), CircleShape)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = {
+                        thumbOffset = Offset.Zero
+                        onMove(0f, 0f)
+                    },
+                    onDragCancel = {
+                        thumbOffset = Offset.Zero
+                        onMove(0f, 0f)
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val newOffset = thumbOffset + dragAmount
+                        val distance = sqrt(newOffset.x * newOffset.x + newOffset.y * newOffset.y)
+
+                        thumbOffset = if (distance <= maxRadius) {
+                            newOffset
+                        } else {
+                            val angle = kotlin.math.atan2(newOffset.y, newOffset.x)
+                            Offset(cos(angle) * maxRadius, sin(angle) * maxRadius)
+                        }
+
+                        onMove(thumbOffset.x / maxRadius, thumbOffset.y / maxRadius)
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        // کلاهک متحرک جوی‌استیک
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(thumbOffset.x.toInt(), thumbOffset.y.toInt()) }
+                .size(60.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(Color(0xFF58A6FF), Color(0xFF1F6FEB))
+                    )
+                )
+                .border(2.dp, Color(0xFF79C0FF), CircleShape)
+        )
     }
 }
 
