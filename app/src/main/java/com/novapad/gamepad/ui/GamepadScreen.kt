@@ -1,8 +1,9 @@
 package com.novapad.gamepad.ui
 
-import android.view.HapticFeedbackConstants
+import android.content.Context
+import android.os.VibrationEffect
+import android.os.Vibrator
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,112 +13,151 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.ContextFactory
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.novapad.gamepad.BluetoothHidController
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GamepadScreen(controller: BluetoothHidController, isConnected: Boolean) {
-    val view = LocalView.current
-    val haptic = { view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
+fun GamepadScreen(controller: BluetoothHidController) {
+    val context = LocalContext.current
+    val vibrator = remember { context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF121212))
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "NOVAPAD",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-            Badge(
-                containerColor = if (isConnected) Color(0xFF4CAF50) else Color(0xFFE53935)
-            ) {
-                Text(
-                    text = if (isConnected) "Connected" else "Waiting for Host...",
-                    modifier = Modifier.padding(4.dp),
-                    color = Color.White
-                )
+    fun triggerVibration() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(30)
             }
+        } catch (e: Exception) {
+            // Ignore if vibration fails
         }
+    }
 
-        Row(
-            modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            VirtualJoystick(onMove = { x, y -> controller.setJoystick(x, y) })
-        }
-
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 40.dp)
-                .width(280.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            GamepadButton("L1", 4, controller, haptic)
-            GamepadButton("R1", 5, controller, haptic)
-        }
-
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("NovaPad - Gamepad", fontWeight = FontWeight.Bold, color = Color.White) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF121212))
+            )
+        },
+        containerColor = Color(0xFF1E1E1E)
+    ) { paddingValues ->
         Box(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(170.dp)
-                .padding(bottom = 16.dp)
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color(0xFF121212))
         ) {
-            Box(Modifier.align(Alignment.TopCenter)) { GamepadButton("Y", 3, controller, haptic, Color(0xFFFFD54F)) }
-            Box(Modifier.align(Alignment.CenterStart)) { GamepadButton("X", 2, controller, haptic, Color(0xFF4FC3F7)) }
-            Box(Modifier.align(Alignment.CenterEnd)) { GamepadButton("B", 1, controller, haptic, Color(0xFFE57373)) }
-            Box(Modifier.align(Alignment.BottomCenter)) { GamepadButton("A", 0, controller, haptic, Color(0xFF81C784)) }
+            // اتصال و وضعیت
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2C)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF4CAF50))
+                        ) {}
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("آماده برای اتصال بلوتوث HID", color = Color.White, fontSize = 14.sp)
+                    }
+                }
+            }
+
+            // بدنه اصلی دسته (جوی‌استیک و دکمه‌ها)
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // جوی‌استیک چپ برای حرکت
+                Box(
+                    modifier = Modifier.size(160.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    VirtualJoystick(
+                        size = 160.dp,
+                        onMove = { x, y ->
+                            // نگاشت محورهای جوی‌استیک به کنترلر
+                            controller.sendJoystick(x, y)
+                        }
+                    )
+                }
+
+                // دکمه‌های اکشن سمت راست (A, B, X, Y)
+                Box(
+                    modifier = Modifier.size(180.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // دکمه بالای Y
+                    GamepadButton(
+                        text = "Y",
+                        color = Color(0xFFFFEB3b),
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    ) {
+                        triggerVibration()
+                        controller.sendButtonPress(BluetoothHidController.BUTTON_Y)
+                    }
+                    // دکمه چپ X
+                    GamepadButton(
+                        text = "X",
+                        color = Color(0xFF2196F3),
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    ) {
+                        triggerVibration()
+                        controller.sendButtonPress(BluetoothHidController.BUTTON_X)
+                    }
+                    // دکمه راست B
+                    GamepadButton(
+                        text = "B",
+                        color = Color(0xFFF44336),
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    ) {
+                        triggerVibration()
+                        controller.sendButtonPress(BluetoothHidController.BUTTON_B)
+                    }
+                    // دکمه پایین A
+                    GamepadButton(
+                        text = "A",
+                        color = Color(0xFF4CAF50),
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    ) {
+                        triggerVibration()
+                        controller.sendButtonPress(BluetoothHidController.BUTTON_A)
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-fun GamepadButton(
-    label: String,
-    buttonId: Int,
-    controller: BluetoothHidController,
-    onHaptic: () -> Unit,
-    accentColor: Color = Color.White
-) {
-    var isPressed by remember { mutableStateOf(false) }
-
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clip(if (label.contains("1")) RoundedCornerShape(10.dp) else CircleShape)
-            .background(if (isPressed) accentColor else Color(0xFF262626))
-            .pointerInput(buttonId) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        onHaptic()
-                        controller.setButton(buttonId, true)
-                        tryAwaitRelease()
-                        isPressed = false
-                        controller.setButton(buttonId, false)
-                    }
-                )
-            },
-        contentAlignment = Alignment.Center
+fun GamepadButton(text: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.size(56.dp),
+        shape = CircleShape,
+        colors = ButtonDefaults.buttonColors(containerColor = color)
     ) {
-        Text(
-            text = label,
-            color = if (isPressed) Color.Black else accentColor,
-            fontWeight = FontWeight.Bold,
-            fontSize = 18.sp
-        )
+        Text(text, color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 18.sp)
     }
 }
