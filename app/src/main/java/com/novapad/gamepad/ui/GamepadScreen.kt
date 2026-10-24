@@ -1,6 +1,7 @@
 package com.novapad.gamepad.ui
 
 import android.content.Context
+import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.foundation.background
@@ -13,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ContextFactory
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,17 +26,15 @@ fun GamepadScreen(controller: BluetoothHidController) {
     val context = LocalContext.current
     val vibrator = remember { context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
 
-    fun triggerVibration() {
+    val triggerVibration: () -> Unit = {
         try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(30)
             }
-        } catch (e: Exception) {
-            // Ignore if vibration fails
-        }
+        } catch (_: Exception) {}
     }
 
     Scaffold(
@@ -54,7 +52,6 @@ fun GamepadScreen(controller: BluetoothHidController) {
                 .padding(paddingValues)
                 .background(Color(0xFF121212))
         ) {
-            // اتصال و وضعیت
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -74,14 +71,13 @@ fun GamepadScreen(controller: BluetoothHidController) {
                                 .size(12.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF4CAF50))
-                        ) {}
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("آماده برای اتصال بلوتوث HID", color = Color.White, fontSize = 14.sp)
                     }
                 }
             }
 
-            // بدنه اصلی دسته (جوی‌استیک و دکمه‌ها)
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -89,7 +85,6 @@ fun GamepadScreen(controller: BluetoothHidController) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // جوی‌استیک چپ برای حرکت
                 Box(
                     modifier = Modifier.size(160.dp),
                     contentAlignment = Alignment.Center
@@ -97,27 +92,24 @@ fun GamepadScreen(controller: BluetoothHidController) {
                     VirtualJoystick(
                         size = 160.dp,
                         onMove = { x, y ->
-                            // نگاشت محورهای جوی‌استیک به کنترلر
                             controller.sendJoystick(x, y)
                         }
                     )
                 }
 
-                // دکمه‌های اکشن سمت راست (A, B, X, Y)
                 Box(
                     modifier = Modifier.size(180.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    // دکمه بالای Y
                     GamepadButton(
                         text = "Y",
-                        color = Color(0xFFFFEB3b),
+                        color = Color(0xFFFFEB3B),
                         modifier = Modifier.align(Alignment.TopCenter)
                     ) {
                         triggerVibration()
                         controller.sendButtonPress(BluetoothHidController.BUTTON_Y)
                     }
-                    // دکمه چپ X
+
                     GamepadButton(
                         text = "X",
                         color = Color(0xFF2196F3),
@@ -126,7 +118,7 @@ fun GamepadScreen(controller: BluetoothHidController) {
                         triggerVibration()
                         controller.sendButtonPress(BluetoothHidController.BUTTON_X)
                     }
-                    // دکمه راست B
+
                     GamepadButton(
                         text = "B",
                         color = Color(0xFFF44336),
@@ -135,7 +127,7 @@ fun GamepadScreen(controller: BluetoothHidController) {
                         triggerVibration()
                         controller.sendButtonPress(BluetoothHidController.BUTTON_B)
                     }
-                    // دکمه پایین A
+
                     GamepadButton(
                         text = "A",
                         color = Color(0xFF4CAF50),
@@ -151,7 +143,12 @@ fun GamepadScreen(controller: BluetoothHidController) {
 }
 
 @Composable
-fun GamepadButton(text: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun GamepadButton(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
     Button(
         onClick = onClick,
         modifier = modifier.size(56.dp),
