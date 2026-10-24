@@ -3,102 +3,103 @@ package com.novapad.gamepad
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
-import java.util.concurrent.Executors
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
-@SuppressLint("MissingPermission")
 class BluetoothHidController(private val context: Context) {
-
-    private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    private val adapter: BluetoothAdapter? = bluetoothManager.adapter
+    private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private var hidDevice: BluetoothHidDevice? = null
-    private var hostDevice: BluetoothDevice? = null
+    private var targetDevice: BluetoothDevice? = null
 
-    private var buttonsState: Short = 0
-    private var stickX: Byte = 0
-    private var stickY: Byte = 0
+    private val _isConnected = MutableStateFlow(false)
+    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    var onConnectionStateChanged: ((Boolean) -> Unit)? = null
+    private val serviceListener = object : BluetoothProfile.ServiceListener {
+        @SuppressLint("MissingPermission")
+        override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+            if (profile == BluetoothProfile.HID_DEVICE) {
+                hidDevice = proxy as BluetoothHidDevice
+                registerApp()
+            }
+        }
 
-    private val hidDescriptor = byteArrayOf(
-        0x05.toByte(), 0x01.toByte(),
-        0x09.toByte(), 0x05.toByte(),
-        0xa1.toByte(), 0x01.toByte(),
-        0xa1.toByte(), 0x00.toByte(),
-        0x05.toByte(), 0x01.toByte(),
-        0x09.toByte(), 0x30.toByte(),
-        0x09.toByte(), 0x31.toByte(),
-        0x15.toByte(), 0x81.toByte(),
-        0x25.toByte(), 0x7f.toByte(),
-        0x75.toByte(), 0x08.toByte(),
-        0x95.toByte(), 0x02.toByte(),
-        0x81.toByte(), 0x02.toByte(),
-        0x05.toByte(), 0x09.toByte(),
-        0x19.toByte(), 0x01.toByte(),
-        0x29.toByte(), 0x0c.toByte(),
-        0x15.toByte(), 0x00.toByte(),
-        0x25.toByte(), 0x01.toByte(),
-        0x75.toByte(), 0x01.toByte(),
-        0x95.toByte(), 0x0c.toByte(),
-        0x81.toByte(), 0x02.toByte(),
-        0x75.toByte(), 0x01.toByte(),
-        0x95.toByte(), 0x04.toByte(),
-        0x81.toByte(), 0x03.toByte(),
-        0xc0.toByte(),
-        0xc0.toByte()
-    )
+        override fun onServiceDisconnected(profile: Int) {
+            if (profile == BluetoothProfile.HID_DEVICE) {
+                hidDevice = null
+                _isConnected.value = false
+            }
+        }
+    }
 
     private val callback = object : BluetoothHidDevice.Callback() {
         override fun onConnectionStateChanged(device: BluetoothDevice?, state: Int) {
-            super.onConnectionStateChanged(device, state)
-            val isConnected = state == BluetoothProfile.STATE_CONNECTED
-            if (isConnected) hostDevice = device else if (state == BluetoothProfile.STATE_DISCONNECTED) hostDevice = null
-            onConnectionStateChanged?.invoke(isConnected)
+            targetDevice = if (state == BluetoothProfile.STATE_CONNECTED) device else null
+            _isConnected.value = (state == BluetoothProfile.STATE_CONNECTED)
         }
     }
 
-    fun init() {
-        adapter?.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
-            override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                if (profile == BluetoothProfile.HID_DEVICE) {
-                    hidDevice = proxy as BluetoothHidDevice
-                    val sdp = BluetoothHidDeviceAppSdpSettings("NovaPad", "Virtual Gamepad", "Nova", BluetoothHidDevice.SUBCLASS1_COMBO, hidDescriptor)
-                    val qos = BluetoothHidDeviceAppQosSettings(BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT, 800, 9, 0, 11250, BluetoothHidDeviceAppQosSettings.MAX)
-                    hidDevice?.registerApp(sdp, null, qos, Executors.newSingleThreadExecutor(), callback)
-                }
-            }
-            override fun onServiceDisconnected(profile: Int) {
-                hidDevice = null
-            }
-        }, BluetoothProfile.HID_DEVICE)
+    init {
+        bluetoothAdapter?.getProfileProxy(context, serviceListener, BluetoothProfile.HID_DEVICE)
     }
 
-    fun setButton(buttonIndex: Int, isPressed: Boolean) {
-        buttonsState = if (isPressed) {
-            (buttonsState.toInt() or (1 shl buttonIndex)).toShort()
-        } else {
-            (buttonsState.toInt() and (1 shl buttonIndex).inv()).toShort()
-        }
-        sendReport()
-    }
-
-    fun setJoystick(x: Float, y: Float) {
-        stickX = (x * 127).toInt().coerceIn(-127, 127).toByte()
-        stickY = (y * 127).toInt().coerceIn(-127, 127).toByte()
-        sendReport()
-    }
-
-    private fun sendReport() {
-        val target = hostDevice ?: return
-        val report = byteArrayOf(
-            stickX,
-            stickY,
-            (buttonsState.toInt() and 0xFF).toByte(),
-            ((buttonsState.toInt() shr 8) and 0xFF).toByte()
+    @SuppressLint("MissingPermission")
+    private fun registerApp() {
+        val sdp = BluetoothHidDeviceAppSdpSettings(
+            "NovaPad Gamepad",
+            "NovaPad Virtual HID Controller",
+            "NovaPad",
+            BluetoothHidDeviceAppSdpSettings.SUBCLASS1_COMBO,
+            REPORT_DESCRIPTOR
         )
-        hidDevice?.sendReport(target, 0, report)
+        val qos = BluetoothHidDeviceAppQosSettings(
+            BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
+            800,
+            9,
+            0,
+            11250,
+            BluetoothHidDeviceAppQosSettings.MAX
+        )
+        hidDevice?.registerApp(sdp, qos, null, context.mainExecutor, callback)
     }
 
-    fun close() {
-        hidDevice?.unregisterApp()
+    @SuppressLint("MissingPermission")
+    fun sendReport(x: Byte, y: Byte, buttons: Byte) {
+        val device = targetDevice ?: return
+        val report = byteArrayOf(x, y, buttons)
+        hidDevice?.sendReport(device, 4, report)
+    }
+
+    @SuppressLint("MissingPermission")
+    fun cleanup() {
+        try {
+            hidDevice?.unregisterApp()
+        } catch (_: Exception) {}
+        bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hidDevice)
+    }
+
+    companion object {
+        private val REPORT_DESCRIPTOR = byteArrayOf(
+            0x05.toByte(), 0x01.toByte(), // USAGE_PAGE (Generic Desktop)
+            0x09.toByte(), 0x05.toByte(), // USAGE (Game Pad)
+            0xa1.toByte(), 0x01.toByte(), // COLLECTION (Application)
+            0x85.toByte(), 0x04.toByte(), //   REPORT_ID (4)
+            0x09.toByte(), 0x30.toByte(), //   USAGE (X)
+            0x09.toByte(), 0x31.toByte(), //   USAGE (Y)
+            0x15.toByte(), 0x81.toByte(), //   LOGICAL_MINIMUM (-127)
+            0x25.toByte(), 0x7f.toByte(), //   LOGICAL_MAXIMUM (127)
+            0x75.toByte(), 0x08.toByte(), //   REPORT_SIZE (8)
+            0x95.toByte(), 0x02.toByte(), //   REPORT_COUNT (2)
+            0x81.toByte(), 0x02.toByte(), //   INPUT (Data,Var,Abs)
+            0x05.toByte(), 0x09.toByte(), //   USAGE_PAGE (Button)
+            0x19.toByte(), 0x01.toByte(), //   USAGE_MINIMUM (Button 1)
+            0x29.toByte(), 0x08.toByte(), //   USAGE_MAXIMUM (Button 8)
+            0x15.toByte(), 0x00.toByte(), //   LOGICAL_MINIMUM (0)
+            0x25.toByte(), 0x01.toByte(), //   LOGICAL_MAXIMUM (1)
+            0x75.toByte(), 0x01.toByte(), //   REPORT_SIZE (1)
+            0x95.toByte(), 0x08.toByte(), //   REPORT_COUNT (8)
+            0x81.toByte(), 0x02.toByte(), //   INPUT (Data,Var,Abs)
+            0xc0.toByte()                // END_COLLECTION
+        )
     }
 }
